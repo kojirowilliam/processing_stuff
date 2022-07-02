@@ -6,8 +6,11 @@ int totBands = 16384; // Total number of bands analyzed
 int minBands = 0; // Lower limit scope of visualized bands
 int maxBands = totBands; // Higher limit scope of visualized bands
 float[] spectrum = new float[totBands];
-float highestFreq = 0;
-float highestBand = 0;
+int numFreqs = 50; // The number of frequencies kept track of every cycle
+float absoluteFreq = 0;
+float absoluteBand = 0;
+float[] highestFreq = new float[numFreqs];
+float[] highestBand= new float[numFreqs];
 float frequencyMultiplier = 1.345564; // works pretty well. Tuned the mic to A4
 
 int canvasWidth = 900; // 50 for margin on each side, 50 for the size of each block in the matrix, and 5 as a barrier between blocks, 60 (50+10 for margin) for the size of the letters 
@@ -16,7 +19,7 @@ String[] notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B
 float freqError = 1.02; // Since 2^(1/12) is a little more than 1.05, 1.02 should be about the mid point between two note
 NoteBlock[] noteBlocks;
 
-int frames = 30;
+int frames = 5;
 int curFrame = 0;
 
 void settings() { 
@@ -56,22 +59,46 @@ void setup() {
 // Goal is a 12 x 9 grid with A, A#, B, C, C#, D, D#, E, F, F#, G, G# on the left side and numbers from 0-8 on the bottom to signal the frequency of the sound
 // Notes that are played more often are a darker gradient of red. The gradient changes as time goes on so that the colors of each matrix change over time.
 void draw() {
+  absoluteFreq = 0;
+  absoluteBand = 0;
+  for (int i = 0; i<numFreqs; i++) {
+    highestFreq[i] = 0;
+    highestBand[i] = 0;
+  }
   fft.analyze(spectrum);
   for(int i = minBands; i < maxBands; i++){
-    if(spectrum[i] > highestFreq) {
-      highestBand = i*frequencyMultiplier;
-      highestFreq = spectrum[i];
+    if(spectrum[i] > absoluteFreq) {
+      absoluteFreq = spectrum[i];
+      absoluteBand = i*frequencyMultiplier;
+    }
+    if(spectrum[i] > min(highestFreq)) {
+      int j = 0;
+      while(highestFreq[j] > spectrum[i]) {
+        j++;
+      }
+      highestFreq = splice(highestFreq, spectrum[i], j);
+      highestBand = splice(highestBand, i*frequencyMultiplier, j);
+      println("preshorten");
+      printArray(highestBand);
+      printArray(highestFreq);
+      highestFreq = shorten(highestFreq);
+      highestBand = shorten(highestBand);
+      println("postshorten");
+      printArray(highestBand);
     }
   }
   
   // Drawing the note blocks
+  stroke(10);
+  printArray(highestFreq);
+  println(absoluteBand+": "+absoluteFreq);
   for (int i = 0; i < noteBlocks.length; i++) {
-    println(highestBand);
-    noteBlocks[i].createBlock(highestBand);
+    for(int j=0; j<highestBand.length; j++) {
+      noteBlocks[i].createBlock(highestBand[j]);
+      
+    }
   }
   curFrame += 1;
-  highestBand = 0;
-  highestFreq = 0;
 }
 
 void initNoteBlocks() {
@@ -111,7 +138,6 @@ class NoteBlock {
   }
   
   void createBlock(float newFreq) {
-    stroke(10);
     fill(getColor(newFreq));
     rect(xpos, ypos, blockWidth, blockHeight, blockRadius);
   }
