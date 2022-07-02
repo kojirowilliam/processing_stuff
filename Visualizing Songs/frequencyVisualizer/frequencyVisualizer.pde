@@ -8,7 +8,7 @@ int maxBands = totBands; // Higher limit scope of visualized bands
 float[] spectrum = new float[totBands];
 float highestFreq = 0;
 int highestBand = 0;
-float frequencyMultiplier = 1.344; // works pretty well
+float frequencyMultiplier = 1.345564; // works pretty well. Tuned the mic to A4
 
 void setup() {
   size(640,640);
@@ -29,7 +29,7 @@ void setup() {
 
 void draw() {
   
-  frameRate(2);
+  frameRate(30);
   background(#542220);
   fft.analyze(spectrum);
 

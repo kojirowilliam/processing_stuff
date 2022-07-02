@@ -53,7 +53,7 @@ void setup()
   
   minim = new Minim(this);
   
-  song = minim.loadFile("marcus_kellis_theme.mp3", 1024);
+  song = minim.loadFile("../mp3 tests/Future_song.mp3", 1024);
   song.play();
   // a beat detection object that is FREQ_ENERGY mode that 
   // expects buffers the length of song's buffer size
