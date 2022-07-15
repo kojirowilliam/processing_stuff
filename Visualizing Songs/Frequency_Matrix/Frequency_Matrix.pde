@@ -7,12 +7,8 @@ import processing.sound.*;
 FFT fft;
 AudioIn in;
 int totBands = 16384; // Total number of bands analyzed
-int minBands = 0; // Lower limit scope of visualized bands
-int maxBands = totBands; // Higher limit scope of visualized bands
 float[] spectrum = new float[totBands];
 int numFreqs = 20; // The number of frequencies kept track of every cycle
-float absoluteFreq = 0;
-float absoluteBand = 0;
 float highestAmp = 0;
 float[] highestFreq = new float[numFreqs];
 float[] highestBand= new float[numFreqs];
@@ -21,6 +17,7 @@ float frequencyMultiplier = 1.345564; // works pretty well. Tuned the mic to A4
 int canvasWidth = 900; // 50 for margin on each side, 50 for the size of each block in the matrix, and 5 as a barrier between blocks, 60 (50+10 for margin) for the size of the letters
 int canvasHeight = 850; // 50 for margin on the top and bottom, 50 for the size of each block in the matrix, and 5 as a barrier between blocks,
 String[] notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+int totBlocks = 8*12;
 float freqError = 1.02; // Since 2^(1/12) is a little more than 1.05, 1.02 should be about the mid point between two note
 NoteBlock[] noteBlocks;
 int frames = 30;
@@ -43,7 +40,6 @@ void setup() {
   for (int i = 0; i<12; i++) {
     text(notes[i], 70*i+65, height);
   }
-  int totBlocks = 8*12;
   noteBlocks = new NoteBlock[totBlocks];
   initNoteBlocks();
 
@@ -71,60 +67,87 @@ void draw() {
 }
 
 void colorNoteBlocks() {
-  getHighestFreq(); // Sets highestFreq[] and highestBand[]
-  calculateAmps(); // Calculates the totAmps for each noteBlock
+  calculateAmps(); // Calculates the totAmps for each noteBlock and sets 'highestAmp'
   for (int i = 0; i<noteBlocks.length; i++) {
     if (noteBlocks[i].getTotAmp() > 0) {
-      println(noteBlocks[i].getTotAmp());
-      float tempAlpha = map(noteBlocks[i].getTotAmp(), 0, highestAmp, 0, 10);
-      color tempColor = color(noteBlocks[i].getColor(), tempAlpha);
+      println(highestAmp);
+      int tempRed = ceil(map(noteBlocks[i].getTotAmp(), 0, highestAmp, noteBlocks[i].getBaseColor()[0], noteBlocks[i].getAmpColor()[0]));
+      int tempGreen = ceil(map(noteBlocks[i].getTotAmp(), 0, highestAmp, noteBlocks[i].getBaseColor()[1], noteBlocks[i].getAmpColor()[1]));
+      int tempBlue = ceil(map(noteBlocks[i].getTotAmp(), 0, highestAmp, noteBlocks[i].getBaseColor()[2], noteBlocks[i].getAmpColor()[2]));
+      color tempColor = color(tempRed, tempGreen, tempBlue);
       noteBlocks[i].setColor(tempColor);
-    }
-    else {
+    } else {
       noteBlocks[i].setBaseColor();
     }
   }
   highestAmp = 0;
 }
 
-void getHighestFreq() {
-  absoluteFreq = 0;
-  absoluteBand = 0;
+void calculateAmps() {
   for (int i = 0; i<numFreqs; i++) {
     highestFreq[i] = 0;
     highestBand[i] = 0;
   }
   fft.analyze(spectrum);
-  for (int i = minBands; i < maxBands; i++) {
-    if (spectrum[i] > absoluteFreq) {
-      absoluteFreq = spectrum[i];
-      absoluteBand = i*frequencyMultiplier;
-    }
-    if (spectrum[i] > min(highestFreq)) {
-      int j = 0;
-      while (highestFreq[j] > spectrum[i]) {
-        j++;
+  
+  float[] noteFreqs = new float[totBlocks];
+  for(int i = 0; i<totBlocks; i++) {
+    noteFreqs[i] = noteBlocks[i].getFreq();
+  }
+  
+  for (int i = floor(noteBlocks[0].getMinFreq()/1.345564); i < noteBlocks[noteBlocks.length-1].getMaxFreq()/1.345564; i++) {
+    float freq = i*frequencyMultiplier;
+    int[] nearestFreqs = quickFind(noteFreqs, freq);
+    for (int j = 0; j<nearestFreqs.length; j++){
+      if (noteBlocks[nearestFreqs[j]].isWithinRange(freq)) {
+        if(spectrum[i] > highestAmp) {
+          highestAmp = spectrum[i];
+        }
+        noteBlocks[nearestFreqs[j]].incrementAmp(spectrum[i]);
       }
-      highestFreq = splice(highestFreq, spectrum[i], j);
-      highestBand = splice(highestBand, i*frequencyMultiplier, j);
-      highestFreq = shorten(highestFreq);
-      highestBand = shorten(highestBand);
     }
   }
-  //printArray(highestBand);
-  //printArray(highestFreq);
-  //println(absoluteBand+": "+absoluteFreq);
 }
 
-void calculateAmps() {
-  for (int i = 0; i<highestBand.length; i++) {
-    for (int j=0; j<noteBlocks.length && highestBand[i] < noteBlocks[j].getMaxFreq() && highestBand[i] > noteBlocks[j].getMinFreq(); j++) {
-      noteBlocks[j].incrementAmp(highestFreq[i]);
-      if (highestAmp < noteBlocks[j].getTotAmp()) {
-        highestAmp = noteBlocks[j].getTotAmp();
-      }
+int[] quickFind(float[] arr, float val) {
+  // Uses an algorithm similar to quicksort to find the two values in 'arr' that have 'val' between them. Assumes 'val' is already sorted
+  // Returns a value in the form [i, i+1], where i is the index of 'arr' a little less than 'val' and i+1 is a little more.
+  return quickFindHelper(0, arr.length-1, arr, val);
+}
+
+int[] quickFindHelper(int first, int last, float[] arr, float val) {
+  // Does recursion to find the range where 'val' exists in 'arr'
+  int partition;
+  // TODO:WILL NEED TO IMPLEMENT A SMART PARTITION
+
+  partition = floor(last/2);
+  if (partition>=last) { // Checks if partition is valid
+    partition = last-1;
+  }
+  else if(partition <= first) {
+    partition = first+1;
+  }
+  // Checks which side of the partition 'val' is on
+  if (arr[partition] < val) {
+    first = partition;
+  }
+  else {
+    last = partition;
+  }
+
+  if (last==first) {
+    if (abs(arr[last-1]-val) > abs(arr[last+1]-val)) {
+      last += 1;
+    }
+    else {
+      first -=1;
     }
   }
+  if (last-first == 1) {
+    int[] range = {first, last};
+    return range;
+  }
+  return quickFindHelper(first, last, arr, val);
 }
 
 void initNoteBlocks() {
@@ -149,11 +172,12 @@ class NoteBlock {
   //color ampColor; // The color of the block that varies depending on the amplitude of the frequency
   float blockWidth = 50;
   float blockHeight = 50;
+  float ampTot = 0; // The total amps the noteblock has during the current frame
+  float colorStrength = 0;
   int blockRadius = 20;
-  color baseColor = color(#F5E3E3, 10);
-  color ampColor = color(#d92637);
-  color noteColor = baseColor;
-  color ampTot = 0; // The total amps the noteblock has during the current frame
+  int[] baseColor = {245, 227, 227}; // Ordered as {R, G, B}
+  int[] ampColor = {217, 38, 55};
+  color noteColor;
 
   NoteBlock(float x, float y, float freq, String note) {
     xpos = x;
@@ -163,6 +187,10 @@ class NoteBlock {
 
     maxFreq = freqError*noteFreq;
     minFreq = 2*noteFreq - maxFreq;
+  }
+  
+  float getFreq() {
+    return noteFreq;
   }
 
   float getMaxFreq() {
@@ -177,12 +205,24 @@ class NoteBlock {
     return ampTot;
   }
 
-  color getColor() { // Returns what color the note block should be
+  int[] getBaseColor() {
+    return baseColor;
+  }
+  
+  int[] getAmpColor() {
     return ampColor;
+  }
+  
+  boolean isWithinRange(float freq) {
+    // Returns true if 'freq' is within the min and max freqs.
+    if(minFreq<freq && freq < maxFreq) {
+      return true;
+    }
+    return false;
   }
 
   void setBaseColor() {
-    noteColor = baseColor;
+    noteColor = color(baseColor[0], baseColor[1], baseColor[2]);
   }
 
   void setColor(color newColor) {
@@ -196,7 +236,6 @@ class NoteBlock {
   }
 
   void incrementAmp(float num) {
-    println("incrementing amp");
     ampTot += num;
   }
 
